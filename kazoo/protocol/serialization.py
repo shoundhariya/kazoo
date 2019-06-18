@@ -138,6 +138,26 @@ class Create(namedtuple('Create', 'path data acl flags')):
         return read_string(bytes, offset)[0]
 
 
+class CreateTTL(namedtuple('CreateTTL', 'path data acl flags ttl')):
+    type = 21
+
+    def serialize(self):
+        b = bytearray()
+        b.extend(write_string(self.path))
+        b.extend(write_buffer(self.data))
+        b.extend(int_struct.pack(len(self.acl)))
+        for acl in self.acl:
+            b.extend(int_struct.pack(acl.perms) +
+                     write_string(acl.id.scheme) + write_string(acl.id.id))
+        b.extend(int_struct.pack(self.flags))
+        b.extend(long_struct.pack(self.ttl))
+        return b
+
+    @classmethod
+    def deserialize(cls, bytes, offset):
+        return read_string(bytes, offset)[0]
+
+
 class Delete(namedtuple('Delete', 'path version')):
     type = 2
 

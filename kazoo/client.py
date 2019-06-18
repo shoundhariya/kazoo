@@ -855,7 +855,7 @@ class KazooClient(object):
         return self.sync_async(path).get()
 
     def create(self, path, value=b"", acl=None, ephemeral=False,
-               sequence=False, makepath=False):
+               sequence=False, makepath=False, ttl=None):
         """Create a node with the given value as its data. Optionally
         set an ACL on the node.
 
@@ -925,10 +925,10 @@ class KazooClient(object):
         """
         acl = acl or self.default_acl
         return self.create_async(path, value, acl=acl, ephemeral=ephemeral,
-                                 sequence=sequence, makepath=makepath).get()
+                                 sequence=sequence, makepath=makepath, ttl=ttl).get()
 
     def create_async(self, path, value=b"", acl=None, ephemeral=False,
-                     sequence=False, makepath=False):
+                     sequence=False, makepath=False, ttl= None):
         """Asynchronously create a ZNode. Takes the same arguments as
         :meth:`create`.
 
@@ -955,6 +955,8 @@ class KazooClient(object):
             raise TypeError("Invalid type for 'sequence' (bool expected)")
         if not isinstance(makepath, bool):
             raise TypeError("Invalid type for 'makepath' (bool expected)")
+        if ttl and not isinstance(ttl, int):
+            raise TypeError("Invalid type for 'ttl' (int expected)")
 
         flags = 0
         if ephemeral:
@@ -969,7 +971,7 @@ class KazooClient(object):
         @capture_exceptions(async_result)
         def do_create():
             result = self._create_async_inner(
-                path, value, acl, flags, trailing=sequence)
+                path, value, acl, flags, ttl, trailing=sequence)
             result.rawlink(create_completion)
 
         @capture_exceptions(async_result)
@@ -993,11 +995,16 @@ class KazooClient(object):
         do_create()
         return async_result
 
-    def _create_async_inner(self, path, value, acl, flags, trailing=False):
+    def _create_async_inner(self, path, value, acl, flags, ttl, trailing=False):
         async_result = self.handler.async_result()
-        call_result = self._call(
-            Create(_prefix_root(self.chroot, path, trailing=trailing),
-                   value, acl, flags), async_result)
+        if ttl and flags != 1 and flags != 3:
+            call_result = self._call(
+                CreateTTL(_prefix_root(self.chroot, path, trailing=trailing),
+                    value, acl, flags, ttl), async_result)
+        else:
+            call_result = self._call(
+                Create(_prefix_root(self.chroot, path, trailing=trailing),
+                    value, acl, flags), async_result)
         if call_result is False:
             # We hit a short-circuit exit on the _call. Because we are
             # not using the original async_result here, we bubble the
